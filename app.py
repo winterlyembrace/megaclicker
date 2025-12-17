@@ -1,186 +1,171 @@
+import os
+from flask import Flask, render_template_string, request, redirect, url_for
+import redis
+
+app = Flask(__name__)
+
+# Подключение к Redis (замените параметры на свои при необходимости)
+redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+# --- КОНФИГУРАЦИЯ УРОВНЕЙ ---
+# Level 0: Старт (1 очко за клик). Чтобы перейти на след уровень, нужно заплатить 200.
+# Level 1: (куплено за 200). Дает 5 очков. След цена: 500.
+# Level 2: (куплено за 500). Дает 10 очков. След цена: 1000.
+LEVELS = {
+    0: {'multiplier': 1,  'cost': 200},
+    1: {'multiplier': 5,  'cost': 500},
+    2: {'multiplier': 10, 'cost': 1000},
+    3: {'multiplier': 20, 'cost': None} # Максимальный уровень (цены нет)
+}
+
 HTML_TEMPLATE = """
-<!doctype html>
+<!DOCTYPE html>
+<html lang="ru">
 <head>
-    <title>Clicks Counter</title>
+    <meta charset="UTF-8">
+    <title>Clicker Upgrade</title>
     <style>
-        /* Стили для центрирования всего содержимого */
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center; /* Центрирование по горизонтали */
-            justify-content: center; /* Центрирование по вертикали */
-            min-height: 100vh; /* Занимает всю высоту viewport */
-            margin: 0;
-            font-family: Arial, sans-serif;
-            text-align: center;
-        }
+        body { font-family: 'Arial', sans-serif; text-align: center; margin: 0; padding: 0; background-color: #f4f4f9; }
         
-        /* Стили для основного контейнера, чтобы расположить элементы рядом */
+        /* Основной контейнер по центру */
         .main-container {
             display: flex;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            gap: 50px; /* Расстояние между элементами */
-        }
-        
-        /* Увеличение заголовка */
-        h1 {
-            font-size: 2.5em;
-        }
-        
-        /* Увеличение и выделение счетчика */
-        .count {
-            font-size: 5em;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        /* Стили для кнопки CLICK */
-        .click-button {
-            padding: 20px 40px;
-            font-size: 1.8em;
-            cursor: pointer;
-            border: none;
-            border-radius: 10px;
-            color: white;
-            background-color: #28a745; /* Зеленый цвет */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.3s;
-        }
-        
-        .click-button:hover {
-            background-color: #218838;
+            height: 100vh;
         }
 
-        /* Стили для надписи апгрейда */
-        .upgrade-status {
-            font-size: 1.2em;
-            color: #555;
-            min-width: 250px; /* Чтобы не скакало при появлении кнопки */
+        h1 { font-size: 3rem; color: #333; }
+        .score { font-size: 5rem; font-weight: bold; color: #007bff; margin: 20px 0; }
+        
+        .btn-click {
+            padding: 20px 50px;
+            font-size: 2rem;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px #1e7e34;
+        }
+        .btn-click:active { box-shadow: 0 2px #1e7e34; transform: translateY(3px); }
+
+        /* --- БЛОК АПГРЕЙДА (СВЕРХУ СПРАВА) --- */
+        .upgrade-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 250px;
             text-align: left;
         }
 
-        /* Стили для кнопки UPGRADE */
-        .upgrade-button {
-            padding: 10px 20px;
-            font-size: 1.2em;
-            cursor: pointer;
+        .upgrade-info { margin-bottom: 10px; font-size: 0.9rem; color: #555; }
+        
+        .btn-upgrade {
+            width: 100%;
+            padding: 10px;
+            background-color: #ffc107;
             border: none;
             border-radius: 5px;
-            color: white;
-            background-color: #dc3545; /* Красный цвет */
-            transition: opacity 0.3s;
-            margin-top: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #333;
         }
+        .btn-upgrade:disabled { background-color: #ddd; color: #999; cursor: not-allowed; }
+        .btn-upgrade:hover:not(:disabled) { background-color: #e0a800; }
+
     </style>
 </head>
 <body>
-    <h1>Total Clicks (x{{ multiplier }})</h1>
-    <div class="main-container">
-        
-        <div class="count">{{ count }}</div>
-        
-        <form method="POST">
-            <button type="submit" name="click" class="click-button">CLICK!</button>
-        </form>
-        
-        <div class="upgrade-status">
-            {% if multiplier > 1 %}
-                <p style="color: green; font-weight: bold;">UPGRADED! Clicks per action: {{ multiplier }}</p>
+
+    <div class="upgrade-panel">
+        <h3>Магазин</h3>
+        <div class="upgrade-info">
+            <strong>Текущий уровень:</strong> {{ level }}<br>
+            <strong>Множитель:</strong> x{{ multiplier }}<br>
+            {% if next_cost %}
+                <strong>След. апгрейд:</strong> {{ next_cost }} кликов
             {% else %}
-                <p>Get {{ upgrade_threshold - count }} more clicks to upgrade.</p>
-                {% if upgrade_available %}
-                    <form method="POST">
-                        <button type="submit" name="upgrade" class="upgrade-button">UPGRADE!</button>
-                    </form>
-                {% else %}
-                    <p style="color: #999;">Requires {{ upgrade_threshold }} clicks.</p>
-                {% endif %}
+                <strong>Максимум достигнут!</strong>
             {% endif %}
         </div>
-        
+
+        <form method="POST">
+            {% if next_cost %}
+                {% if count >= next_cost %}
+                    <button class="btn-upgrade" name="upgrade">
+                        КУПИТЬ ( -{{ next_cost }} )
+                    </button>
+                {% else %}
+                    <button class="btn-upgrade" disabled>
+                        Нужно {{ next_cost }} кликов
+                    </button>
+                {% endif %}
+            {% else %}
+                <button class="btn-upgrade" disabled>MAX LEVEL</button>
+            {% endif %}
+        </form>
     </div>
+
+    <div class="main-container">
+        <h1>Кликер</h1>
+        <div class="score">{{ count }}</div>
+        
+        <form method="POST">
+            <button class="btn-click" name="click">CLICK!</button>
+        </form>
+    </div>
+
 </body>
 </html>
 """
 
-from flask import Flask, request, render_template_string, redirect, url_for
-import redis
-import os
-
-app = Flask(__name__)
-
-# --- Константы игры ---
-UPGRADE_THRESHOLD = 200  # Порог для получения апгрейда
-INITIAL_MULTIPLIER = 1   # Начальный множитель
-UPGRADED_MULTIPLIER = 5  # Множитель после апгрейда
-
-# Подключение к Redis (имя хоста 'redis' берется из docker-compose.yml)
-try:
-    redis_client = redis.Redis(host='redis', port=6379, db=0)
-    redis_client.ping()
-except Exception as e:
-    print(f"Ошибка подключения к Redis: {e}")
-    # В продакшене лучше предусмотреть резервное поведение
-
-# --- 💡 ФУНКЦИЯ ДЛЯ ЧТЕНИЯ/ЗАПИСИ МНОЖИТЕЛЯ ---
-def get_or_set_multiplier(current_count):
-    # 1. Сначала пытаемся прочитать текущий множитель из Redis
-    multiplier_bytes = redis_client.get('click_multiplier')
-    
-    if multiplier_bytes is None:
-        # 2. Если множителя нет, устанавливаем его
-        if current_count >= UPGRADE_THRESHOLD:
-            multiplier = UPGRADED_MULTIPLIER
-        else:
-            multiplier = INITIAL_MULTIPLIER
-            
-        # Записываем его обратно в Redis для сохранения
-        redis_client.set('click_multiplier', multiplier)
-        return multiplier
-    else:
-        # 3. Если множитель уже есть, просто возвращаем его
-        return int(multiplier_bytes.decode('utf-8'))
-
-# --- ОСНОВНАЯ ЛОГИКА ---
 @app.route('/', methods=['GET', 'POST'])
 def home():
-    
-    # 1. ПОЛУЧЕНИЕ ДАННЫХ
-    try:
-        count_bytes = redis_client.get('click_counter')
-    except Exception:
-        count_bytes = None
+    # 1. Получаем текущие данные из Redis
+    # Если счетчика нет, будет 0
+    current_count = int(redis_client.get('click_counter') or 0)
+    # Текущий уровень апгрейда (0, 1, 2...)
+    current_level = int(redis_client.get('upgrade_level') or 0)
 
-    current_count = int(count_bytes.decode('utf-8')) if count_bytes else 0
-    current_multiplier = get_or_set_multiplier(current_count) # Получаем множитель
+    # Определяем параметры текущего уровня из словаря LEVELS
+    # .get(..., LEVELS[max]) нужно на случай, если уровень выйдет за пределы словаря
+    level_data = LEVELS.get(current_level, LEVELS[max(LEVELS.keys())])
+    current_multiplier = level_data['multiplier']
+    next_upgrade_cost = level_data['cost']
 
-    # 2. ОБРАБОТКА POST-ЗАПРОСА (КЛИК)
     if request.method == 'POST':
-        # Если нажата кнопка "CLICK!"
+        # --- КЛИК ---
         if 'click' in request.form:
-            # Используем текущий множитель для увеличения счетчика
             redis_client.incrby('click_counter', current_multiplier)
-            return redirect(url_for('home')) # Перенаправляем, чтобы избежать повторных кликов при обновлении
-        
-        # Если нажата кнопка "UPGRADE"
+            return redirect(url_for('home'))
+
+        # --- АПГРЕЙД ---
         elif 'upgrade' in request.form:
-            # Если апгрейд доступен и множитель еще не повышен
-            if current_count >= UPGRADE_THRESHOLD and current_multiplier == INITIAL_MULTIPLIER:
-                # Устанавливаем новый множитель и сохраняем его в Redis
-                redis_client.set('click_multiplier', UPGRADED_MULTIPLIER)
+            # Проверяем, есть ли цена (не макс уровень) и хватает ли денег
+            if next_upgrade_cost is not None and current_count >= next_upgrade_cost:
+                # 1. Списываем очки ("тратятся")
+                redis_client.decrby('click_counter', next_upgrade_cost)
+                # 2. Повышаем уровень
+                redis_client.incr('upgrade_level')
                 return redirect(url_for('home'))
 
-    # 3. ЛОГИКА ОТОБРАЖЕНИЯ
-    # Определяем состояние апгрейда
-    upgrade_available = current_count >= UPGRADE_THRESHOLD and current_multiplier == INITIAL_MULTIPLIER
-    
-    return render_template_string(HTML_TEMPLATE, 
+    # 3. РЕНДЕРИНГ
+    return render_template_string(HTML_TEMPLATE,
                                   count=current_count,
                                   multiplier=current_multiplier,
-                                  upgrade_threshold=UPGRADE_THRESHOLD,
-                                  upgrade_available=upgrade_available)
-
+                                  level=current_level,
+                                  next_cost=next_upgrade_cost)
 
 if __name__ == '__main__':
+    # Очистка базы при перезапуске (раскомментируйте, если хотите сбрасывать прогресс)
+    # redis_client.flushall()
+    
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
