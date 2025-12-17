@@ -4,30 +4,31 @@ import redis
 
 app = Flask(__name__)
 
-# Подключение к Redis (замените параметры на свои при необходимости)
+# Redis connection (adjust parameters if necessary)
+# Using 'redis' as host for Docker environments
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# --- КОНФИГУРАЦИЯ УРОВНЕЙ ---
-# Level 0: Старт (1 очко за клик). Чтобы перейти на след уровень, нужно заплатить 200.
-# Level 1: (куплено за 200). Дает 5 очков. След цена: 500.
-# Level 2: (куплено за 500). Дает 10 очков. След цена: 1000.
+# --- LEVELS CONFIGURATION ---
+# Level 0: Start (1 point per click). To upgrade, pay 200.
+# Level 1: (purchased for 200). Gives 5 points. Next price: 500.
+# Level 2: (purchased for 500). Gives 10 points. Next price: 1000.
 LEVELS = {
     0: {'multiplier': 1,  'cost': 200},
     1: {'multiplier': 5,  'cost': 500},
     2: {'multiplier': 10, 'cost': 1000},
-    3: {'multiplier': 20, 'cost': None} # Максимальный уровень (цены нет)
+    3: {'multiplier': 20, 'cost': None} # Max level reached
 }
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Clicker Upgrade</title>
     <style>
         body { font-family: 'Arial', sans-serif; text-align: center; margin: 0; padding: 0; background-color: #f4f4f9; }
         
-        /* Основной контейнер по центру */
+        /* Center main container */
         .main-container {
             display: flex;
             flex-direction: column;
@@ -51,7 +52,7 @@ HTML_TEMPLATE = """
         }
         .btn-click:active { box-shadow: 0 2px #1e7e34; transform: translateY(3px); }
 
-        /* --- БЛОК АПГРЕЙДА (СВЕРХУ СПРАВА) --- */
+        /* --- UPGRADE PANEL (TOP RIGHT) --- */
         .upgrade-panel {
             position: absolute;
             top: 20px;
@@ -85,14 +86,14 @@ HTML_TEMPLATE = """
 <body>
 
     <div class="upgrade-panel">
-        <h3>Магазин</h3>
+        <h3>Shop</h3>
         <div class="upgrade-info">
-            <strong>Текущий уровень:</strong> {{ level }}<br>
-            <strong>Множитель:</strong> x{{ multiplier }}<br>
+            <strong>Current Level:</strong> {{ level }}<br>
+            <strong>Multiplier:</strong> x{{ multiplier }}<br>
             {% if next_cost %}
-                <strong>След. апгрейд:</strong> {{ next_cost }} кликов
+                <strong>Next Upgrade:</strong> {{ next_cost }} clicks
             {% else %}
-                <strong>Максимум достигнут!</strong>
+                <strong>Max Level Reached!</strong>
             {% endif %}
         </div>
 
@@ -100,11 +101,11 @@ HTML_TEMPLATE = """
             {% if next_cost %}
                 {% if count >= next_cost %}
                     <button class="btn-upgrade" name="upgrade">
-                        КУПИТЬ ( -{{ next_cost }} )
+                        BUY ( -{{ next_cost }} )
                     </button>
                 {% else %}
                     <button class="btn-upgrade" disabled>
-                        Нужно {{ next_cost }} кликов
+                        Need {{ next_cost }} clicks
                     </button>
                 {% endif %}
             {% else %}
@@ -114,7 +115,7 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="main-container">
-        <h1>Кликер</h1>
+        <h1>Clicker Game</h1>
         <div class="score">{{ count }}</div>
         
         <form method="POST">
@@ -128,35 +129,34 @@ HTML_TEMPLATE = """
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
-    # 1. Получаем текущие данные из Redis
-    # Если счетчика нет, будет 0
+    # 1. Fetch current data from Redis
+    # Defaults to 0 if key doesn't exist
     current_count = int(redis_client.get('click_counter') or 0)
-    # Текущий уровень апгрейда (0, 1, 2...)
+    # Current upgrade level (0, 1, 2...)
     current_level = int(redis_client.get('upgrade_level') or 0)
 
-    # Определяем параметры текущего уровня из словаря LEVELS
-    # .get(..., LEVELS[max]) нужно на случай, если уровень выйдет за пределы словаря
+    # Determine level parameters from the LEVELS dictionary
     level_data = LEVELS.get(current_level, LEVELS[max(LEVELS.keys())])
     current_multiplier = level_data['multiplier']
     next_upgrade_cost = level_data['cost']
 
     if request.method == 'POST':
-        # --- КЛИК ---
+        # --- CLICK LOGIC ---
         if 'click' in request.form:
             redis_client.incrby('click_counter', current_multiplier)
             return redirect(url_for('home'))
 
-        # --- АПГРЕЙД ---
+        # --- UPGRADE LOGIC ---
         elif 'upgrade' in request.form:
-            # Проверяем, есть ли цена (не макс уровень) и хватает ли денег
+            # Check if upgrade is available and user has enough points
             if next_upgrade_cost is not None and current_count >= next_upgrade_cost:
-                # 1. Списываем очки ("тратятся")
+                # 1. Deduct points (spend them)
                 redis_client.decrby('click_counter', next_upgrade_cost)
-                # 2. Повышаем уровень
+                # 2. Increase level
                 redis_client.incr('upgrade_level')
                 return redirect(url_for('home'))
 
-    # 3. РЕНДЕРИНГ
+    # 3. RENDERING
     return render_template_string(HTML_TEMPLATE,
                                   count=current_count,
                                   multiplier=current_multiplier,
@@ -164,7 +164,7 @@ def home():
                                   next_cost=next_upgrade_cost)
 
 if __name__ == '__main__':
-    # Очистка базы при перезапуске (раскомментируйте, если хотите сбрасывать прогресс)
+    # Reset progress on restart (uncomment to clear database)
     # redis_client.flushall()
     
     port = int(os.environ.get('PORT', 5000))
