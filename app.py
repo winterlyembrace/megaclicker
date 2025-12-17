@@ -5,7 +5,7 @@ import redis
 app = Flask(__name__)
 
 # Подключение к Redis (замените параметры на свои при необходимости)
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
 # --- КОНФИГУРАЦИЯ УРОВНЕЙ ---
 # Level 0: Старт (1 очко за клик). Чтобы перейти на след уровень, нужно заплатить 200.
