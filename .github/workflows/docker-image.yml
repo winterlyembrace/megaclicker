@@ -33,3 +33,6 @@ jobs:
         push: true 
         tags: | 
           ${{ secrets.DOCKER_USERNAME }}/megaclicker:latest
+    
+    - name: Deploy to Render
+        run: curl -f ${{ secrets.RENDER_DEPLOY }}
