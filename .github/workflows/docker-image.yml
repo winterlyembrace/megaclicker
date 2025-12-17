@@ -33,4 +33,3 @@ jobs:
         push: true 
         tags: | 
           ${{ secrets.DOCKER_USERNAME }}/megaclicker:latest
-          ${{ secrets.DOCKER_USERNAME }}/megaclicker:${{ github.sha }} # Tag with full commit SHA for uniqueness
