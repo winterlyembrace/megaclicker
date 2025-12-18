@@ -35,4 +35,4 @@ jobs:
           ${{ secrets.DOCKER_USERNAME }}/megaclicker:latest
     
     - name: Deploy to Render
-        run: curl -f ${{ secrets.RENDER_DEPLOY }}
+       run: curl -f ${{ secrets.RENDER_DEPLOY }}
