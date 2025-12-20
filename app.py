@@ -14,7 +14,7 @@ if redis_url:
 else:
     # Вариант для вашего ПК (Docker Compose)
     # Здесь мы используем host='redis2', как у вас и было
-    redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+    redis_client = redis.Redis(host='REDIS_URL', port=6379, db=0, decode_responses=True)
 
 # --- LEVELS CONFIGURATION ---
 # Level 0: Start (1 point per click). To upgrade, pay 200.
