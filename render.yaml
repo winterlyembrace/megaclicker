@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: MegaClickerAlpha
+    runtime: image
+    image:
+      url: docker.io/winterlyembrace/megaclicker:latest
+    plan: free
+    region: singapore
+    autoDeployTrigger: commit
+    envVars:
+      - key: redis2
+        fromService:
+          type: redis
+          name: my-redis
+          property: connectionString
+
+  - type: redis
+    plan: free
+    name: my-redis
+    ipAllowList: []

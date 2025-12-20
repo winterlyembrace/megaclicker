@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # Redis connection (adjust parameters if necessary)
 # Using 'redis' as host for Docker environments
-redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(host='redis2', port=6379, db=0, decode_responses=True)
 
 # --- LEVELS CONFIGURATION ---
 # Level 0: Start (1 point per click). To upgrade, pay 200.
