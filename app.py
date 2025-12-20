@@ -1,9 +1,3 @@
-To implement a multi-player system, we need to add a secret_key so Flask can sign the cookies, and then use a uuid to create a unique prefix for each user's data in Redis.
-
-Here is the updated code with the session system and English comments:
-
-Python
-
 import os
 import uuid
 import redis
