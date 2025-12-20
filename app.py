@@ -8,13 +8,10 @@ app = Flask(__name__)
 # Using 'redis' as host for Docker environments
 redis_url = os.environ.get("REDIS_URL")
 
-if redis_url:
-    # Вариант для Render
-    redis_client = redis.from_url(redis_url, decode_responses=True)
-else:
-    # Вариант для вашего ПК (Docker Compose)
-    # Здесь мы используем host='redis2', как у вас и было
-    redis_client = redis.Redis(host='REDIS_URL', port=6379, db=0, decode_responses=True)
+# decode_responses=True нужен, чтобы получать строки, а не байты
+redis_client = redis.from_url(redis_url, decode_responses=True)
+
+
 
 # --- LEVELS CONFIGURATION ---
 # Level 0: Start (1 point per click). To upgrade, pay 200.
