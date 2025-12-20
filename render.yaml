@@ -15,6 +15,7 @@ services:
           property: connectionString
 
   - type: redis
+    region: singapore
     plan: free
     name: my-redis
     ipAllowList: []
